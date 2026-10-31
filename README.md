@@ -35,10 +35,8 @@
 A run of `Check AUR Package Updates` after the setup replaces this text with the badges. The full guide is [docs/SETUP.md](https://github.com/staticwire/aurtomator/blob/main/docs/SETUP.md#after-creating-the-repository) of aurtomator. Report a problem of aurtomator in [its issues](https://github.com/staticwire/aurtomator/issues) and a vulnerability [privately](https://github.com/staticwire/aurtomator/security/advisories/new), not in this repository.
 <!-- BADGES:END -->
 
-Package configs for [aurtomator](https://github.com/staticwire/aurtomator), which checks them for new upstream versions on a schedule and pushes the updates to the AUR.
-
 ## Packages
 
 <!-- PACKAGES:START -->
-A run of `Check AUR Package Updates` writes the package table here.
+Package configs for [aurtomator](https://github.com/staticwire/aurtomator), which checks them for new upstream versions on a schedule and pushes the updates to the AUR. A run of `Check AUR Package Updates` after the setup replaces this text with the package table.
 <!-- PACKAGES:END -->
