@@ -1,0 +1,30 @@
+name: Check AUR Package Updates
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: check-updates
+  cancel-in-progress: false
+
+jobs:
+  check-updates:
+    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@98fde17b99a83add9a3235a2ea40e59bf7c79082 # v0.8.0
+    permissions:
+      contents: write
+      issues: write
+    secrets:
+      AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+      GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+      AUR_GIT_NAME: ${{ secrets.AUR_GIT_NAME }}
+      AUR_GIT_EMAIL: ${{ secrets.AUR_GIT_EMAIL }}
+
+  notify:
+    needs: check-updates
+    if: ${{ always() && needs.check-updates.result != 'success' }}
+    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@98fde17b99a83add9a3235a2ea40e59bf7c79082 # v0.8.0
+    permissions:
+      actions: read
+      issues: write

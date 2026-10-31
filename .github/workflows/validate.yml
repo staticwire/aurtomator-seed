@@ -1,0 +1,13 @@
+name: Validate packages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    uses: staticwire/aurtomator/.github/workflows/validate.yml@98fde17b99a83add9a3235a2ea40e59bf7c79082 # v0.8.0
