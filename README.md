@@ -1,5 +1,7 @@
 # AUR packages
 
+This is a repository for AUR packages. Each package has a config in `packages/`, and [aurtomator](https://github.com/staticwire/aurtomator) checks it for new upstream versions on a schedule and pushes the updates to the AUR.
+
 <!-- BADGES:START -->
 **After creating your repository from the template [staticwire/aurtomator-seed](https://github.com/staticwire/aurtomator-seed)**, set it up:
 
@@ -38,5 +40,5 @@ A run of `Check AUR Package Updates` after the setup replaces this text with the
 ## Packages
 
 <!-- PACKAGES:START -->
-Package configs for [aurtomator](https://github.com/staticwire/aurtomator), which checks them for new upstream versions on a schedule and pushes the updates to the AUR. A run of `Check AUR Package Updates` after the setup replaces this text with the package table.
+A run of `Check AUR Package Updates` after the setup replaces this text with the package table.
 <!-- PACKAGES:END -->
