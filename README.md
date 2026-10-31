@@ -3,7 +3,7 @@
 This is a repository for AUR packages. Each package has a config in `packages/`, and [aurtomator](https://github.com/staticwire/aurtomator) checks it for new upstream versions on a schedule and pushes the updates to the AUR.
 
 <!-- BADGES:START -->
-**After creating your repository from the template [staticwire/aurtomator-seed](https://github.com/staticwire/aurtomator-seed)**, set it up:
+**After creating your repository with "Use this template"**, set it up:
 
 1. In Settings > General > Features, turn on Issues. A run reports failures and update alerts as issues.
 2. In the Actions tab, check that `Check AUR Package Updates` and `Validate packages` are enabled.
