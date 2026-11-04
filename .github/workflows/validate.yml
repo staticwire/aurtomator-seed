@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   validate:
-    uses: staticwire/aurtomator/.github/workflows/validate.yml@79ca93c1d0914cb54b60e723b1d658e0ced18177 # v0.8.2
+    uses: staticwire/aurtomator/.github/workflows/validate.yml@89b8de79626e41ab2fc7b5916b285c1c54432958 # v0.8.3
