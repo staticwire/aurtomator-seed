@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   check-updates:
-    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@98fde17b99a83add9a3235a2ea40e59bf7c79082 # v0.8.0
+    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@1c55034545ed2bd1154f98e6d2ef420633564653 # v0.8.1
     permissions:
       contents: write
       issues: write
