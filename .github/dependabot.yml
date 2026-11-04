@@ -8,3 +8,6 @@ updates:
       aurtomator:
         patterns:
           - "staticwire/aurtomator/*"
+    cooldown:
+      exclude:
+        - "staticwire/aurtomator/*"
