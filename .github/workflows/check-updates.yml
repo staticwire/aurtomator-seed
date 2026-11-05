@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   check-updates:
-    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@89b8de79626e41ab2fc7b5916b285c1c54432958 # v0.8.3
+    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@e486db9d7b9309fc7eee099681686808e5d627f8 # v0.9.0
     permissions:
       contents: write
       issues: write
@@ -24,7 +24,7 @@ jobs:
   notify:
     needs: check-updates
     if: ${{ always() && needs.check-updates.result != 'success' }}
-    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@89b8de79626e41ab2fc7b5916b285c1c54432958 # v0.8.3
+    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@e486db9d7b9309fc7eee099681686808e5d627f8 # v0.9.0
     permissions:
       actions: read
       issues: write
