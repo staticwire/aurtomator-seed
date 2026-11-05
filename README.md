@@ -20,6 +20,8 @@ This is a repository for AUR packages. Each package has a config in `packages/`,
    ./aurtomator.sh setup
    ```
 
+   Until the secrets are set, a run with a package to push fails and opens an issue. The first run after `./aurtomator.sh setup` in which no job fails closes that issue.
+
 5. Add a package. `<name>` is the pkgbase on the AUR:
 
    ```bash
@@ -32,7 +34,7 @@ This is a repository for AUR packages. Each package has a config in `packages/`,
    ./aurtomator.sh validate-pkg <name>
    ```
 
-6. Commit and push.
+6. Commit and push. The schedule starts a run a few times a day, and Actions > Check AUR Package Updates > Run workflow starts one at once.
 
 A run of `Check AUR Package Updates` after the setup replaces this text with the badges. The full guide is [docs/SETUP.md](https://github.com/staticwire/aurtomator/blob/main/docs/SETUP.md#after-creating-the-repository) of aurtomator. Report a problem of aurtomator in [its issues](https://github.com/staticwire/aurtomator/issues) and a vulnerability [privately](https://github.com/staticwire/aurtomator/security/advisories/new), not in this repository.
 <!-- BADGES:END -->
