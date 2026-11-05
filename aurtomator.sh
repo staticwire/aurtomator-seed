@@ -4,6 +4,7 @@
 # .github/workflows/check-updates.yml pins:
 #
 #   ./aurtomator.sh setup                 scripts/setup.sh
+#   ./aurtomator.sh draft <name>          scripts/draft.sh <name>
 #   ./aurtomator.sh validate-pkg <name>   scripts/validate-pkg.sh <name>
 #   ./aurtomator.sh check-update <name>   scripts/check-update.sh <name>
 #   ./aurtomator.sh update-pkg <name> <version> --dry-run
@@ -78,7 +79,7 @@ fi
 
 # The documented commands. Another script of scripts/ is a step of the CI
 # jobs and runs after a warning.
-commands=(setup sample validate-pkg check-update update-pkg check-all pin)
+commands=(setup draft sample validate-pkg check-update update-pkg check-all pin)
 cmd="${1:-}"
 if [[ "$cmd" == sample ]]; then
   exec cat "$copy/packages/example.yml.sample"

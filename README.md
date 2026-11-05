@@ -25,12 +25,13 @@ This is a repository for AUR packages. Each package has a config in `packages/`,
 5. Add a package. `<name>` is the pkgbase on the AUR:
 
    ```bash
-   ./aurtomator.sh sample > packages/<name>.yml
+   ./aurtomator.sh draft <name>
    ```
 
-   Set `name: <name>`, a `strategy` and its `upstream` fields in that file. Then check it:
+   It reads the `.SRCINFO` of the package in the AUR, writes `packages/<name>.yml` with a strategy and its `upstream` fields, and runs `validate-pkg` and `check-update` on that file, see [docs/WORKFLOW.md](https://github.com/staticwire/aurtomator/blob/main/docs/WORKFLOW.md#72-draft-a-package) of aurtomator. When no rule matches the url or a source of the package, it writes nothing. Then write the file from the sample, with `name: <name>`, a `strategy` and its `upstream` fields, and check it:
 
    ```bash
+   ./aurtomator.sh sample > packages/<name>.yml
    ./aurtomator.sh validate-pkg <name>
    ```
 
