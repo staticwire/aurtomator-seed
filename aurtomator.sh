@@ -17,6 +17,10 @@
 
 set -euo pipefail
 
+if ! command -v yq >/dev/null; then
+  echo "$0 needs yq: https://github.com/mikefarah/yq" >&2
+  exit 1
+fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workflow=.github/workflows/check-updates.yml
 if [[ ! -f "$root/$workflow" ]]; then
@@ -37,6 +41,14 @@ fi
 [[ "${pins[0]}" =~ $uses ]]
 repo="${BASH_REMATCH[1]}"
 sha="${BASH_REMATCH[2]}"
+# GitHub reads YAML, where a pin in quotes counts and a line in a text does
+# not, so yq has to read the same one pin
+mapfile -t read_pins < <(yq -r 'explode(.) | .jobs[].uses | select(. != null) | select(test("/[.]github/workflows/check-updates[.]yml@"))' "$root/$workflow")
+if [[ ${#read_pins[@]} -ne 1 || "${read_pins[0]}" != "$repo/.github/workflows/check-updates.yml@$sha" ]]; then
+  echo "Write the pin of check-updates.yml in $workflow on one uses: line without quotes. GitHub reads:" >&2
+  printf '  %s\n' "${read_pins[@]:-none}" >&2
+  exit 1
+fi
 
 if [[ "${1:-}" == pin ]]; then
   if [[ $# -ne 2 || ! "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -49,7 +61,23 @@ if [[ "${1:-}" == pin ]]; then
     echo "No tag $2 in $repo" >&2
     exit 1
   fi
+  if [[ ! "$new" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Tag $2 of $repo names no commit SHA" >&2
+    exit 1
+  fi
   cd "$root"
+  # sed moves a pin on a uses: line alone, so every pin GitHub reads in the
+  # two files has to be on one before any file changes
+  for file in "$workflow" .github/workflows/validate.yml; do
+    [[ -f "$file" ]] || continue
+    mapfile -t on_lines < <(sed -nE "s|^[[:space:]]*uses:[[:space:]]+($repo/\.github/workflows/[a-z-]+\.yml@[0-9a-f]{40})([[:space:]].*)?$|\1|p" "$file" | sort)
+    mapfile -t read_pins < <(yq -r 'explode(.) | .jobs[].uses | select(. != null)' "$file" | grep -E "^$repo/\.github/workflows/[a-z-]+\.yml@[0-9a-f]{40}\$" | sort)
+    if [[ "${on_lines[*]}" != "${read_pins[*]}" ]]; then
+      echo "Write each pin of $repo in $file on one uses: line without quotes. GitHub reads:" >&2
+      printf '  %s\n' "${read_pins[@]:-none}" >&2
+      exit 1
+    fi
+  done
   for file in "$workflow" .github/workflows/validate.yml; do
     [[ -f "$file" ]] || continue
     sed -i -E "s|^([[:space:]]*uses:[[:space:]]+$repo/\.github/workflows/[a-z-]+\.yml@)[0-9a-f]{40}([[:space:]].*)?$|\1$new # $2|" "$file"
