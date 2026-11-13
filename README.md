@@ -28,7 +28,7 @@ This is a repository for AUR packages. Each package has a config in `packages/`,
    ./aurtomator.sh draft <name>
    ```
 
-   It reads the `.SRCINFO` of the package in the AUR, writes `packages/<name>.yml` with a strategy and its `upstream` fields, and runs `validate-pkg` and `check-update` on that file, see [docs/WORKFLOW.md](https://github.com/staticwire/aurtomator/blob/main/docs/WORKFLOW.md#72-draft-a-package) of aurtomator. When no rule matches the url or a source of the package, it writes nothing. Then write the file from the sample, with `name: <name>`, a `strategy` and its `upstream` fields, and check it:
+   It reads the `.SRCINFO` of the package in the AUR, writes `packages/<name>.yml` with a strategy and its `upstream` fields, and runs `validate-pkg` and `check-update` on that file, see [Draft a package](https://aurtomator.dev/add-a-package/#draft-a-package). When no rule matches the url or a source of the package, it writes nothing. Then write the file from the sample, with `name: <name>`, a `strategy` and its `upstream` fields, and check it:
 
    ```bash
    ./aurtomator.sh sample > packages/<name>.yml
@@ -37,7 +37,7 @@ This is a repository for AUR packages. Each package has a config in `packages/`,
 
 6. Commit and push. The schedule starts a run a few times a day, and Actions > Check AUR Package Updates > Run workflow starts one at once.
 
-A run of `Check AUR Package Updates` after the setup replaces this text with the badges. The full guide is [docs/SETUP.md](https://github.com/staticwire/aurtomator/blob/main/docs/SETUP.md#after-creating-the-repository) of aurtomator. Report a problem of aurtomator in [its issues](https://github.com/staticwire/aurtomator/issues) and a vulnerability [privately](https://github.com/staticwire/aurtomator/security/advisories/new), not in this repository.
+A run of `Check AUR Package Updates` after the setup replaces this text with the badges. The full guide is the [Setup](https://aurtomator.dev/setup/#after-creating-the-repository) page of aurtomator. Report a problem of aurtomator in [its issues](https://github.com/staticwire/aurtomator/issues) and a vulnerability [privately](https://github.com/staticwire/aurtomator/security/advisories/new), not in this repository.
 <!-- BADGES:END -->
 
 ## Packages
