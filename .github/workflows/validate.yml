@@ -9,5 +9,17 @@ permissions:
   contents: read
 
 jobs:
+  pins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: ./aurtomator.sh check-pins
+
   validate:
-    uses: staticwire/aurtomator/.github/workflows/validate.yml@137d8b73ddf646a926fd0c3504a2c4f12fef16ad # v0.12.1
+    needs: pins
+    uses: staticwire/aurtomator/.github/workflows/validate.yml@6defee07a976372d784ec525c6a3f6b76eceeecb # v0.12.3
