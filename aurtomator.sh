@@ -11,6 +11,7 @@
 #   ./aurtomator.sh check-all             scripts/check-all.sh
 #   ./aurtomator.sh sample                prints packages/example.yml.sample
 #   ./aurtomator.sh pin vX.Y.Z            pins the calling workflows to a release
+#   ./aurtomator.sh check-pins            checks each pin against its release tag
 #
 # The first run of a pin fetches aurtomator at that commit into
 # ~/.cache/aurtomator/<sha>, or $XDG_CACHE_HOME/aurtomator/<sha>.
@@ -25,6 +26,11 @@ fi
 yq_version=$(yq --version 2>&1 || true)
 if [[ "$yq_version" != *mikefarah/yq* ]]; then
   echo "$0 needs mikefarah/yq, go-yq on Arch, and this yq prints: ${yq_version%%$'\n'*}" >&2
+  exit 1
+fi
+# Releases of mikefarah/yq before 4.40.1 lack -r, document_index or kind
+if [[ $(Y=x yq -N -r '(.a | test(strenv(Y))) and document_index == 0 and (.a | kind) == "scalar"' <<<'a: x' 2>/dev/null) != true ]]; then
+  echo "$0 needs a newer mikefarah/yq, and this yq prints: ${yq_version%%$'\n'*}" >&2
   exit 1
 fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,20 +67,22 @@ check_shape "$workflow"
 # The repository and the commit come from one uses: line, never a comment
 uses='^[[:space:]]*uses:[[:space:]]+([[:alnum:]_.-]+/[[:alnum:]_.-]+)/\.github/workflows/check-updates\.yml@([0-9a-f]{40})([[:space:]]|$)'
 mapfile -t pins < <(grep -E "$uses" "$root/$workflow" || true)
-if [[ ${#pins[@]} -eq 0 ]]; then
-  echo "No commit SHA pinned in $workflow" >&2
-  exit 1
-fi
 if [[ ${#pins[@]} -gt 1 ]]; then
   echo "More than one uses: line pins check-updates.yml in $workflow" >&2
   exit 1
 fi
-[[ "${pins[0]}" =~ $uses ]]
-repo="${BASH_REMATCH[1]}"
-sha="${BASH_REMATCH[2]}"
 # GitHub reads YAML, where a pin in quotes counts and a line in a text does
 # not, so yq has to read the same one pin
 read_out=$(yq -r 'explode(.) | .jobs[].uses | select(. != null) | select(test("/[.]github/workflows/check-updates[.]yml@"))' "$root/$workflow")
+if [[ ${#pins[@]} -eq 0 ]] && ! grep -qE '@[0-9a-f]{40}$' <<<"$read_out"; then
+  echo "No commit SHA pinned in $workflow" >&2
+  exit 1
+fi
+repo="" sha=""
+if [[ ${#pins[@]} -eq 1 && "${pins[0]}" =~ $uses ]]; then
+  repo="${BASH_REMATCH[1]}"
+  sha="${BASH_REMATCH[2]}"
+fi
 mapfile -t read_pins <<<"$read_out"
 if [[ ${#read_pins[@]} -ne 1 || "${read_pins[0]}" != "$repo/.github/workflows/check-updates.yml@$sha" ]]; then
   echo "Write the pin of check-updates.yml in $workflow on one uses: line without quotes. GitHub reads:" >&2
@@ -82,13 +90,46 @@ if [[ ${#read_pins[@]} -ne 1 || "${read_pins[0]}" != "$repo/.github/workflows/ch
   exit 1
 fi
 
+# Print the commit of the tag $1 of the repository; an annotated tag names its
+# commit on the line of <tag>^{}
+tag_commit() {
+  git ls-remote --tags "https://github.com/$repo" |
+    awk -v ref="refs/tags/$1" '$2 == ref || $2 == ref "^{}" { sha = $1 } END { print sha }'
+}
+
+# Stop unless the pin $3 on the uses: line $2 of file $1 is the commit of the release written
+# after it, since GitHub serves the commits of every fork under the name of its parent
+check_release() {
+  local release_re="@${3}[[:space:]]+#[[:space:]]*(v[0-9]+[.][0-9]+[.][0-9]+)([[:space:]]|\$)" tag tagged
+  if [[ ! "$2" =~ $release_re ]]; then
+    echo "Write the release after the pin in $1, as ./aurtomator.sh pin vX.Y.Z does: @$3 # vX.Y.Z" >&2
+    exit 1
+  fi
+  tag="${BASH_REMATCH[1]}"
+  if ! tagged=$(tag_commit "$tag"); then
+    echo "Could not list the tags of $repo" >&2
+    exit 1
+  fi
+  if [[ "$tagged" != "$3" ]]; then
+    echo "The pin $3 in $1 is not the commit of $tag of $repo; ./aurtomator.sh pin vX.Y.Z pins the commit of a release" >&2
+    exit 1
+  fi
+}
+
+# GitHub finds a repository by its name in any case
+names_repo() {
+  [[ "${1,,}" == "${repo,,}"[/@]* ]]
+}
+
 if [[ "${1:-}" == pin ]]; then
   if [[ $# -ne 2 || ! "$2" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Usage: $0 pin vX.Y.Z" >&2
     exit 1
   fi
-  # An annotated tag names its commit on the line of <tag>^{}
-  new=$(git ls-remote --tags "https://github.com/$repo" | awk -v ref="refs/tags/$2" '$2 == ref || $2 == ref "^{}" { sha = $1 } END { print sha }')
+  if ! new=$(tag_commit "$2"); then
+    echo "Could not list the tags of $repo" >&2
+    exit 1
+  fi
   if [[ -z "$new" ]]; then
     echo "No tag $2 in $repo" >&2
     exit 1
@@ -120,12 +161,50 @@ if [[ "${1:-}" == pin ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == check-pins ]]; then
+  if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 check-pins" >&2
+    exit 1
+  fi
+  cd "$root"
+  use_re='^[0-9]+:[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+([^[:space:]]+)'
+  checked=()
+  for file in "$workflow" .github/workflows/validate.yml; do
+    [[ -f "$file" ]] || continue
+    check_shape "$file"
+    # The release comes from the uses: line, so every pin GitHub reads has to be on one
+    read_out=$(yq -r 'explode(.) | .jobs[] | (.uses, .steps[]?.uses) | select(tag == "!!str")' "$file")
+    read_pins=() values=() lines=()
+    while IFS= read -r value; do
+      if names_repo "$value"; then read_pins+=("$value"); fi
+    done < <(sort <<<"$read_out")
+    while IFS= read -r line; do
+      if [[ "$line" =~ $use_re ]] && names_repo "${BASH_REMATCH[2]}"; then
+        values+=("${BASH_REMATCH[2]}")
+        lines+=("$line")
+      fi
+    done < <(grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]' "$file" || true)
+    if [[ "$(printf '%s\n' "${values[@]}" | sort)" != "$(printf '%s\n' "${read_pins[@]}")" ]]; then
+      echo "Write each pin of $repo in $file on one uses: line without quotes. GitHub reads:" >&2
+      printf '  %s\n' "${read_pins[@]:-none}" >&2
+      exit 1
+    fi
+    for i in "${!lines[@]}"; do
+      if [[ ! "${values[i]}" =~ @([0-9a-f]{40})$ ]]; then
+        echo "$file runs ${values[i]}, which names no commit SHA" >&2
+        exit 1
+      fi
+      check_release "$file" "${lines[i]}" "${BASH_REMATCH[1]}"
+      checked+=("$file:${lines[i]}")
+    done
+  done
+  printf '%s\n' "${checked[@]}"
+  exit 0
+fi
+
 copy="${XDG_CACHE_HOME:-$HOME/.cache}/aurtomator/$sha"
 if [[ ! -d "$copy" ]]; then
-  # GitHub serves the commits of every fork under the name of its parent
-  if [[ $'\n'"$(git ls-remote --tags "https://github.com/$repo")" != *$'\n'"$sha"* ]]; then
-    echo "Warning: no tag of $repo points to $sha, check where the pin comes from" >&2
-  fi
+  check_release "$workflow" "${pins[0]}" "$sha"
   mkdir -p "${copy%/*}"
   tmp="$(mktemp -d "$copy.XXXXXX")"
   trap 'rm -rf "$tmp"' EXIT
@@ -141,7 +220,7 @@ fi
 
 # The documented commands. Another script of scripts/ is a step of the CI
 # jobs and runs after a warning.
-commands=(setup draft sample validate-pkg check-update update-pkg check-all pin)
+commands=(setup draft sample validate-pkg check-update update-pkg check-all pin check-pins)
 cmd="${1:-}"
 if [[ "$cmd" == sample ]]; then
   exec cat "$copy/packages/example.yml.sample"

@@ -10,8 +10,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  pins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: ./aurtomator.sh check-pins
+
   check-updates:
-    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@137d8b73ddf646a926fd0c3504a2c4f12fef16ad # v0.12.1
+    needs: pins
+    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@6defee07a976372d784ec525c6a3f6b76eceeecb # v0.12.3
     permissions:
       contents: write
       issues: write
@@ -24,7 +36,7 @@ jobs:
   notify:
     needs: check-updates
     if: ${{ always() && needs.check-updates.result != 'success' }}
-    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@137d8b73ddf646a926fd0c3504a2c4f12fef16ad # v0.12.1
+    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@6defee07a976372d784ec525c6a3f6b76eceeecb # v0.12.3
     permissions:
       actions: read
       issues: write
