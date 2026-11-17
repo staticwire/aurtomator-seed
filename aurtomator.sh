@@ -226,9 +226,27 @@ if [[ "${1:-}" == check-pins ]]; then
   fi
   cd "$root"
   use_re='^[0-9]+:[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+([^[:space:]]+)'
+  release_re='#[[:space:]]*(v[0-9]+[.][0-9]+[.][0-9]+)'
+  # The merge commit of a pull request has the base branch as its first parent, which a checkout
+  # of one commit leaves out and GitHub serves by the SHA of the merge commit
+  base=""
+  if [[ "${GITHUB_EVENT_NAME:-}" == pull_request* ]] && ! base=$(git rev-parse --verify -q 'HEAD^1^{commit}' 2>/dev/null); then
+    git fetch -q --no-tags --depth=2 origin "$(git rev-parse HEAD)" 2>/dev/null || true
+    if ! base=$(git rev-parse --verify -q 'HEAD^1^{commit}' 2>/dev/null); then
+      echo "The checkout holds no parent of the merge commit, and git could not fetch it, so check-pins cannot compare the pins with the base branch; add fetch-depth: 2 to the checkout of the job pins" >&2
+      exit 1
+    fi
+  fi
   checked=()
   for file in "$workflow" .github/workflows/validate.yml; do
     [[ -f "$file" ]] || continue
+    # The newest release that the base branch pins in this file
+    base_release=""
+    if [[ -n "$base" ]]; then
+      base_release=$(git show "$base:$file" 2>/dev/null |
+        grep -oiE "^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+${repo}[^@[:space:]]*@[0-9a-f]{40}[[:space:]]+${release_re}" |
+        grep -oE 'v[0-9]+[.][0-9]+[.][0-9]+$' | sort -V | tail -n 1) || base_release=""
+    fi
     check_shape "$file"
     check_tags "$file"
     # Jobs run a workflow, local or of this repository, and pass it the secrets they name
@@ -271,6 +289,12 @@ if [[ "${1:-}" == check-pins ]]; then
         exit 1
       fi
       check_release "$file" "${lines[i]}" "${BASH_REMATCH[1]}"
+      # Older releases miss the fixes made since, and the jobs with the secrets would run them
+      if [[ -n "$base_release" && "${lines[i]}" =~ $release_re ]] &&
+        [[ "$(printf '%s\n' "${BASH_REMATCH[1]}" "$base_release" | sort -V | head -n 1)" != "$base_release" ]]; then
+        echo "$file moves the pin of $repo from $base_release of the base branch back to ${BASH_REMATCH[1]}; pull requests move pins forward alone" >&2
+        exit 1
+      fi
       checked+=("$file:${lines[i]}")
     done
   done
@@ -281,7 +305,47 @@ fi
 # The XDG Base Directory Specification calls a relative path invalid, to be ignored
 cache="${XDG_CACHE_HOME:-}"
 [[ "$cache" == /* ]] || cache="$HOME/.cache"
+# Links in the path could change between the checks and the run, so the run takes their target once
+if [[ -d "$cache" ]]; then
+  cache=$(cd -P -- "$cache" && pwd -P) || exit 1
+fi
 copy="$cache/aurtomator/$sha"
+# Succeeds when no other account can rename what directory $1 holds: it is no link, belongs to the user and
+# gives group and others no write access; with $2=shared root may own it, and a sticky bit as on /tmp counts
+private_dir() {
+  local owner mode
+  [[ -d "$1" && ! -L "$1" ]] && read -r owner mode < <(stat -c '%u %a' -- "$1") || return 1
+  mode=$((8#$mode))
+  if [[ "${2:-}" == shared ]]; then
+    [[ "$owner" == "$(id -u)" || "$owner" == 0 ]] && ((! (mode & 8#022) || mode & 8#1000))
+  else
+    [[ "$owner" == "$(id -u)" ]] && ((! (mode & 8#022)))
+  fi
+}
+# Accounts that can rename what these directories hold could swap the copy between its check and its run
+check_cache_dirs() {
+  local dir kind=shared
+  for dir in "$cache" "${copy%/*}"; do
+    if [[ -L "$dir" ]]; then
+      echo "$dir is a link, which its owner could point elsewhere before the copy of aurtomator in it runs; make it a directory, or set XDG_CACHE_HOME to another directory" >&2
+      exit 1
+    fi
+    if ! private_dir "$dir" "$kind"; then
+      echo "$dir belongs to another account or lets group or others write it, and they could swap the copy of aurtomator in it before it runs; make it yours with no write access for group and others, or set XDG_CACHE_HOME to another directory" >&2
+      exit 1
+    fi
+    kind=""
+  done
+  # The path of the cache holds no link here, and each directory above can rename the cache whole
+  dir=$cache
+  while [[ "$dir" == /?* ]]; do
+    dir=${dir%/*}
+    if ! private_dir "${dir:-/}" shared; then
+      echo "${dir:-/} belongs to another account or lets group or others write it, and they could swap the copy of aurtomator below it before it runs; set XDG_CACHE_HOME to a directory with no such directory above it" >&2
+      exit 1
+    fi
+  done
+}
 # Succeeds when the copy is the checkout of the pin as the fetch left it, which only the user can write
 copy_ok() {
   local status
@@ -290,6 +354,7 @@ copy_ok() {
     status=$(GIT_OPTIONAL_LOCKS=0 cache_git -C "$copy" status --porcelain --untracked-files=no 2>/dev/null) &&
     [[ -z "$status" ]]
 }
+[[ ! -e "${copy%/*}" && ! -L "${copy%/*}" ]] || check_cache_dirs
 if [[ -e "$copy" || -L "$copy" ]] && ! copy_ok; then
   if [[ -L "$copy" || ! -O "$copy" ]]; then
     echo "$copy is a link or belongs to another user; remove it, then run $0 again" >&2
@@ -300,15 +365,25 @@ if [[ -e "$copy" || -L "$copy" ]] && ! copy_ok; then
 fi
 if [[ ! -d "$copy" ]]; then
   check_release "$workflow" "${pins[0]}" "$sha"
-  mkdir -p "${copy%/*}"
+  # The XDG Base Directory Specification asks for mode 0700, which a umask of 0002 would not give
+  (umask 077 && mkdir -p "${copy%/*}")
+  # New caches get their path at the target of links here, as existing ones did above
+  cache=$(cd -P -- "$cache" && pwd -P) || exit 1
+  copy="$cache/aurtomator/$sha"
+  check_cache_dirs
   tmp="$(mktemp -d "$copy.XXXXXX")"
   trap 'rm -rf "$tmp"' EXIT
   cache_git -C "$tmp" init -q
   cache_git -C "$tmp" fetch -q --depth 1 "https://github.com/$repo" "$sha"
   cache_git -C "$tmp" -c core.autocrlf=false -c core.eol=lf checkout -q FETCH_HEAD
   chmod -R go-w "$tmp"
-  # Runs that started at the same time can make the copy first
+  # Runs that started at the same time can make the copy first, and so can other accounts
+  # that write the cache
   mv -T "$tmp" "$copy" 2>/dev/null || rm -rf "$tmp"
+  if ! copy_ok; then
+    echo "$copy appeared during the fetch and is no checkout of $sha that only you can write; remove it, then run $0 again" >&2
+    exit 1
+  fi
   # Pins still in use after 30 days are fetched again on their next run, and SIGKILL leaves the
   # directory of a fetch. Runs at the same time can remove their own directory while find reads.
   find "${copy%/*}" -mindepth 1 -maxdepth 1 -regextype posix-extended -regex '.*/[0-9a-f]{40}([.][A-Za-z0-9]{6})?' -mtime +30 \
