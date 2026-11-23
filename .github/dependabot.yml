@@ -9,5 +9,6 @@ updates:
         patterns:
           - "staticwire/aurtomator/*"
     cooldown:
+      default-days: 7
       exclude:
         - "staticwire/aurtomator/*"
