@@ -23,4 +23,4 @@ jobs:
 
   validate:
     needs: pins
-    uses: staticwire/aurtomator/.github/workflows/validate.yml@b0118da9552c376366710eb2141d337bccc2b135 # v0.13.0
+    uses: staticwire/aurtomator/.github/workflows/validate.yml@3380839266fc78ff52c6415228671c49fb25ea74 # v0.14.0
