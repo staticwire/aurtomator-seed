@@ -24,7 +24,7 @@ jobs:
 
   check-updates:
     needs: pins
-    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@3380839266fc78ff52c6415228671c49fb25ea74 # v0.14.0
+    uses: staticwire/aurtomator/.github/workflows/check-updates.yml@a3a351ac0a4663e7e9608dff8903383b4fa23ec1 # v0.15.0
     permissions:
       contents: write
       issues: write
@@ -37,7 +37,7 @@ jobs:
   notify:
     needs: check-updates
     if: ${{ always() && needs.check-updates.result != 'success' }}
-    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@3380839266fc78ff52c6415228671c49fb25ea74 # v0.14.0
+    uses: staticwire/aurtomator/.github/workflows/notify-failure.yml@a3a351ac0a4663e7e9608dff8903383b4fa23ec1 # v0.15.0
     permissions:
       actions: read
       issues: write
