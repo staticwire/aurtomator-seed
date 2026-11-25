@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+release=0.15.0 # x-release-please-version
 #
 # Runs a script of aurtomator for this repository, at the commit that
 # .github/workflows/check-updates.yml pins:
@@ -12,6 +13,7 @@
 #   ./aurtomator.sh sample                prints packages/example.yml.sample
 #   ./aurtomator.sh pin vX.Y.Z            pins the calling workflows to a release
 #   ./aurtomator.sh check-pins            checks each pin against its release tag
+#   ./aurtomator.sh version               prints the releases of this file and of the pin
 #
 # The first run of a pin fetches aurtomator at that commit into
 # ~/.cache/aurtomator/<sha>, or $XDG_CACHE_HOME/aurtomator/<sha>.
@@ -158,6 +160,35 @@ tag_commit() {
     awk -v ref="refs/tags/$1" '$2 == ref || $2 == ref "^{}" { sha = $1 } END { print sha }'
 }
 
+# Stop unless the tag $1 of the repository has a published release, immutable after v0.14.0:
+# tags stand before their release is published, and stay when the release run stops
+check_published() {
+  local auth=() answer code body message
+  [[ -z "${GITHUB_TOKEN:-}" ]] || auth=(-H @-)
+  # curl reads the header from stdin, since ps shows every argument to every local user
+  if ! answer=$(curl -qgsSL --proto '=https' --max-time 30 -w '\n%{http_code}' \
+    -H 'Accept: application/vnd.github+json' "${auth[@]}" "https://api.github.com/repos/$repo/releases/tags/$1" \
+    <<<"Authorization: Bearer ${GITHUB_TOKEN:-}"); then
+    echo "Could not ask the GitHub API for the release $1 of $repo" >&2
+    exit 1
+  fi
+  code=${answer##*$'\n'} body=${answer%$'\n'*}
+  if [[ "$code" != 200 && "$code" != 404 ]]; then
+    message=$(yq -p json -r '.message // ""' <<<"$body" 2>/dev/null) || message=""
+    echo "The GitHub API answered HTTP $code for the release $1 of $repo${message:+: ${message%%$'\n'*}}" >&2
+    exit 1
+  fi
+  if [[ "$code" == 404 || "$(T="$1" yq -p json -r '.tag_name == strenv(T) and .draft == false' <<<"$body" 2>/dev/null)" != true ]]; then
+    echo "No published release $1 of $repo; pins name the commit of a published release" >&2
+    exit 1
+  fi
+  if [[ "$(printf '%s\n' v0.14.0 "$1" | sort -V | tail -n 1)" != v0.14.0 &&
+  "$(yq -p json -r '.immutable == true' <<<"$body" 2>/dev/null)" != true ]]; then
+    echo "GitHub shows the release $1 of $repo as mutable, and aurtomator publishes every release after v0.14.0 as immutable" >&2
+    exit 1
+  fi
+}
+
 # Stop unless the pin $3 on the uses: line $2 of file $1 is the commit of the release written
 # after it, since GitHub serves the commits of every fork under the name of its parent
 check_release() {
@@ -175,6 +206,7 @@ check_release() {
     echo "The pin $3 in $1 is not the commit of $tag of $repo; ./aurtomator.sh pin vX.Y.Z pins the commit of a release" >&2
     exit 1
   fi
+  check_published "$tag"
 }
 
 if [[ "${1:-}" == pin ]]; then
@@ -194,6 +226,7 @@ if [[ "${1:-}" == pin ]]; then
     echo "Tag $2 of $repo names no commit SHA" >&2
     exit 1
   fi
+  check_published "$2"
   cd "$root"
   # sed moves a pin on a uses: line alone, so every pin GitHub reads in the two files, of jobs
   # and of steps, has to be on one before any file changes. GitHub reads the repository in any case.
@@ -312,6 +345,11 @@ fi
 copy="$cache/aurtomator/$sha"
 # User namespaces show the accounts they do not map, root of the host among them, with this uid
 overflow_uid=$(cat /proc/sys/kernel/overflowuid 2>/dev/null) || overflow_uid=65534
+# Namespaces that map no uid show this uid for every file, so each owner check would pass
+if [[ "$(id -u)" == "$overflow_uid" ]]; then
+  echo "Your uid is $overflow_uid, which a user namespace gives the accounts it does not map, so the script cannot tell whether another account could swap the copy of aurtomator; run the script outside the namespace, or in one that maps your uid" >&2
+  exit 1
+fi
 home=""
 if [[ "${HOME:-}" == /* ]]; then
   home=$(cd -P -- "$HOME" 2>/dev/null && pwd -P) || home=""
@@ -369,13 +407,16 @@ check_cache_dirs() {
     exit 1
   done
 }
-# Succeeds when the copy is the checkout of the pin as the fetch left it, which only the user can write
+# Succeeds when the copy is the checkout of the pin as the fetch left it, which only the user can write.
+# git status skips files under the assume-unchanged and skip-worktree bits, which ls-files -v shows.
 copy_ok() {
-  local status
+  local status flagged
   [[ -d "$copy" && ! -L "$copy" && -O "$copy" && -z "$(find "$copy" ! -type l -perm /022 -print -quit 2>/dev/null)" ]] &&
     [[ "$(cache_git -C "$copy" rev-parse HEAD 2>/dev/null)" == "$sha" ]] &&
-    status=$(GIT_OPTIONAL_LOCKS=0 cache_git -C "$copy" status --porcelain --untracked-files=no 2>/dev/null) &&
-    [[ -z "$status" ]]
+    status=$(GIT_OPTIONAL_LOCKS=0 cache_git -C "$copy" status --porcelain --untracked-files=all --ignored 2>/dev/null) &&
+    [[ -z "$status" ]] &&
+    flagged=$(cache_git -C "$copy" ls-files -v 2>/dev/null) &&
+    [[ -z "$(sed '/^H /d' <<<"$flagged")" ]]
 }
 [[ ! -e "${copy%/*}" && ! -L "${copy%/*}" ]] || check_cache_dirs
 if [[ -e "$copy" || -L "$copy" ]] && ! copy_ok; then
@@ -427,10 +468,19 @@ touch -c -- "$copy" 2>/dev/null || true
 
 # The documented commands. Another script of scripts/ is a step of the CI
 # jobs and runs after a warning.
-commands=(setup draft sample validate-pkg check-update update-pkg check-all pin check-pins)
+commands=(setup draft sample validate-pkg check-update update-pkg check-all pin check-pins version)
 cmd="${1:-}"
 if [[ "$cmd" == sample ]]; then
   exec cat "$copy/packages/example.yml.sample"
+fi
+if [[ "$cmd" == version ]]; then
+  if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 version" >&2
+    exit 1
+  fi
+  pinned=$(<"$copy/VERSION")
+  printf 'aurtomator.sh %s\ncheck-updates.yml %s\n' "$release" "$pinned"
+  exit 0
 fi
 if [[ ! "$cmd" =~ ^[a-z]+(-[a-z]+)*$ || ! -x "$copy/scripts/$cmd.sh" ]]; then
   echo "Usage: $0 <command> [argument...]" >&2
