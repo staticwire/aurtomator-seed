@@ -21,6 +21,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
       - run: ./aurtomator.sh check-pins
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   check-updates:
     needs: pins
