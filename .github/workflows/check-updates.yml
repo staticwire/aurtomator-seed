@@ -35,7 +35,6 @@ jobs:
       GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
       AUR_GIT_NAME: ${{ secrets.AUR_GIT_NAME }}
       AUR_GIT_EMAIL: ${{ secrets.AUR_GIT_EMAIL }}
-      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
 
   notify:
     needs: check-updates
